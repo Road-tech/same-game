@@ -243,12 +243,14 @@ function onCellClick(e) {
 
 let touchHighlightedCell = null;
 function onCellTouch(e) {
+  if (isAnimating) return;
+  if (state.cleared || !state.hasNext) return;
+  
   const r = +e.currentTarget.dataset.row;
   const c = +e.currentTarget.dataset.col;
 
   if (touchHighlightedCell &&
       touchHighlightedCell[0] === r && touchHighlightedCell[1] === c) {
-    // Second tap on same cell → confirm
     doPlay(r, c);
     touchHighlightedCell = null;
     return;
@@ -271,9 +273,9 @@ function doPlay(r, c) {
   isAnimating = true;
 
   const popDurationMs = 180;
-  const gravityDurationMs = 220;
-  const gravityToCompressDelayMs = 200;
-  const compressDurationMs = 220;
+  const gravityDurationMs = 250;
+  const gravityToCompressDelayMs = 150;
+  const compressDurationMs = 300;
 
   grid.querySelectorAll('.cell').forEach(cell => {
     const cr = +cell.dataset.row;
@@ -421,6 +423,8 @@ function updateGridForCompress(before, after) {
   const cells = grid.children;
   const changed = [];
   
+  const colMap = computeColumnMapping(before, after);
+  
   requestAnimationFrame(() => {
     for (let r = 0; r < state.rows; r++) {
       for (let c = 0; c < state.cols; c++) {
@@ -428,6 +432,7 @@ function updateGridForCompress(before, after) {
         if (!cell) continue;
         const oldVal = before[r][c];
         const newVal = after[r][c];
+        const colOffset = colMap[c];
 
         if (newVal === null) {
           cell.classList.remove('c0', 'c1', 'c2', 'c3', 'c4', 'highlight', 'popping', 'fall', 'slide');
@@ -438,7 +443,6 @@ function updateGridForCompress(before, after) {
         } else {
           const oldColorClass = [...cell.classList].find(x => /^c\d$/.test(x));
           const needsColorUpdate = !oldColorClass || oldColorClass !== `c${newVal}`;
-          const needsAnimation = oldVal === null && newVal !== null;
           
           cell.classList.remove('empty', 'highlight', 'popping', 'fall');
           
@@ -447,18 +451,19 @@ function updateGridForCompress(before, after) {
             cell.classList.add(`c${newVal}`);
           }
           
-          if (needsAnimation) {
+          if (colOffset !== 0) {
+            const moveDistance = colOffset * (cell.offsetWidth + 2);
             cell.style.opacity = '0';
-            cell.style.transform = 'translateX(24px) scale(0.85)';
+            cell.style.transform = `translateX(${moveDistance}px)`;
             
             requestAnimationFrame(() => {
-              cell.style.transition = 'opacity 220ms ease, transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1)';
+              cell.style.transition = `opacity 300ms ease-out, transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1)`;
               cell.style.opacity = '1';
-              cell.style.transform = 'translateX(0) scale(1)';
+              cell.style.transform = 'translateX(0)';
               
               setTimeout(() => {
                 cell.style.transition = '';
-              }, 220);
+              }, 300);
             });
             
             changed.push(cell);
@@ -473,6 +478,28 @@ function updateGridForCompress(before, after) {
   });
   
   return changed;
+}
+
+function computeColumnMapping(before, after) {
+  const cols = before[0].length;
+  const colMap = new Array(cols).fill(0);
+  
+  let afterCol = 0;
+  for (let beforeCol = 0; beforeCol < cols; beforeCol++) {
+    const beforeColEmpty = before.every(row => row[beforeCol] === null);
+    
+    if (!beforeColEmpty) {
+      colMap[afterCol] = beforeCol - afterCol;
+      afterCol++;
+    }
+  }
+  
+  while (afterCol < cols) {
+    colMap[afterCol] = -1;
+    afterCol++;
+  }
+  
+  return colMap;
 }
 
 // ---------------------------------------------------------------------------
