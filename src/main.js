@@ -135,8 +135,6 @@ function renderGrid() {
       }
 
       cell.addEventListener('click',    onCellClick);
-      cell.addEventListener('mouseenter', onCellHover);
-      cell.addEventListener('mouseleave', onCellLeave);
       cell.addEventListener('touchstart', onCellTouch, { passive: true });
 
       grid.appendChild(cell);
@@ -211,28 +209,6 @@ function applyHighlight(points) {
 // ---------------------------------------------------------------------------
 // Event handlers
 // ---------------------------------------------------------------------------
-function onCellHover(e) {
-  if (isAnimating) return;
-  if (state.cleared || !state.hasNext) return;
-  const r = +e.currentTarget.dataset.row;
-  const c = +e.currentTarget.dataset.col;
-  if (state.board[r]?.[c] === null || state.board[r]?.[c] === undefined) {
-    clearHighlight();
-    return;
-  }
-  const points = match(state.board, r, c);
-  if (points) {
-    applyHighlight(points);
-  } else {
-    clearHighlight();
-  }
-}
-
-function onCellLeave() {
-  if (isAnimating) return;
-  clearHighlight();
-}
-
 function onCellClick(e) {
   if (isAnimating) return;
   if (state.cleared || !state.hasNext) return;
