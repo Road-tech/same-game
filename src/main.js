@@ -242,7 +242,10 @@ function onCellClick(e) {
 }
 
 let touchHighlightedCell = null;
+let isTouchEnabled = true;
+
 function onCellTouch(e) {
+  if (!isTouchEnabled) return;
   if (isAnimating) return;
   if (state.cleared || !state.hasNext) return;
   
@@ -271,6 +274,7 @@ function doPlay(r, c) {
   if (!points) return;
 
   isAnimating = true;
+  isTouchEnabled = false;
 
   const popDurationMs = 180;
   const gravityDurationMs = 250;
@@ -322,6 +326,7 @@ function doPlay(r, c) {
 
       setTimeout(() => {
         isAnimating = false;
+        isTouchEnabled = true;
 
         if (state.cleared) {
           saveBest(state.score);
