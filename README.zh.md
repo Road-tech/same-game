@@ -8,7 +8,7 @@
 
 > 📖 **English version**: [README.md](README.md)
 
-**[▶ 在线游玩 →](https://sen.ltd/portfolio/same-game/)**
+**[▶ 在线游玩 →](https://road-tech.github.io/same-game/)**
 
 ## 什么是同色消消乐？
 
