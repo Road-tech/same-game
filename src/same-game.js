@@ -97,32 +97,46 @@ export function fill(board, points) {
     b[r][c] = null;
   }
 
-  // Step 2: build column arrays (col-major) and apply gravity per column.
-  // Reference gravity: reverse col, filter nulls, reverse back, then pad top with nulls.
-  // That is: cells fall downward (row 0 = top, last row = bottom).
-  // After the operation the non-null cells are at the bottom.
+  // Step 2: apply gravity first - blocks fall down in each column
+  const afterGravity = applyGravity(b, rows, cols);
+
+  // Step 3: then compress columns - move non-empty columns to the left
+  const afterCompress = compressColumns(afterGravity, rows, cols);
+
+  return afterCompress;
+}
+
+export function applyGravity(board, rows, cols) {
   const colArrays = [];
   for (let c = 0; c < cols; c++) {
     const col = [];
     for (let r = 0; r < rows; r++) {
-      col.push(b[r][c]);
+      col.push(board[r][c]);
     }
-    // reverse → filter nulls → reverse back → pad top with nulls
     const reversed = col.slice().reverse();
     const nonNull = reversed.filter(v => v !== null);
-    const withNulls = nonNull.reverse(); // non-null cells at bottom
+    const withNulls = nonNull.reverse();
     while (withNulls.length < rows) withNulls.unshift(null);
     colArrays.push(withNulls);
   }
+  return Array.from({ length: rows }, (_, r) =>
+    Array.from({ length: cols }, (_, c) => colArrays[c][r])
+  );
+}
 
-  // Step 3: compress columns — keep only non-empty columns (at least one non-null),
-  // then pad on the right with empty columns.
+export function compressColumns(board, rows, cols) {
+  const colArrays = [];
+  for (let c = 0; c < cols; c++) {
+    const col = [];
+    for (let r = 0; r < rows; r++) {
+      col.push(board[r][c]);
+    }
+    colArrays.push(col);
+  }
   const nonEmptyCols = colArrays.filter(col => col.some(v => v !== null));
   while (nonEmptyCols.length < cols) {
     nonEmptyCols.push(Array(rows).fill(null));
   }
-
-  // Step 4: convert back to row-major layout
   return Array.from({ length: rows }, (_, r) =>
     Array.from({ length: cols }, (_, c) => nonEmptyCols[c][r])
   );

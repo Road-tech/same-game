@@ -235,8 +235,10 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   padding: 8px 12px 24px;
   overflow: auto;
+  min-height: 0;
 }
 
 /* ── Game grid ───────────────────────────────────────────── */
@@ -250,14 +252,135 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
   flex-shrink: 0;
 }
 
+/* Mobile portrait optimization */
+@media screen and (max-width: 768px) and (orientation: portrait) {
+  html, body {
+    font-size: 14px;
+  }
+  
+  .app-header {
+    padding: 10px 16px;
+    gap: 12px;
+  }
+  
+  .app-title {
+    font-size: 1.2rem;
+  }
+  
+  .app-subtitle {
+    font-size: .7rem;
+  }
+  
+  .header-controls {
+    gap: 10px;
+  }
+  
+  .control-group {
+    gap: 1px;
+  }
+  
+  .control-label {
+    font-size: .65rem;
+  }
+  
+  .btn {
+    padding: 6px 12px;
+    font-size: .75rem;
+    min-width: auto;
+  }
+  
+  .score-value {
+    font-size: .85rem;
+    min-width: 8ch;
+  }
+  
+  .hint-text {
+    font-size: .7rem;
+  }
+  
+  .app-main {
+    padding: 6px 8px 20px;
+    justify-content: flex-start;
+    padding-top: 12px;
+  }
+  
+  .game-grid {
+    width: min(98vw, calc(var(--cols, 10) * 38px));
+    gap: 1.5px;
+  }
+  
+  .cell {
+    border-radius: 3px;
+  }
+  
+  .cell.highlight {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 2px rgba(255,255,255,.8), 0 0 10px 3px rgba(255,255,255,.6);
+  }
+  
+  .cell:not(.empty):not(.highlight):hover {
+    transform: scale(1.02);
+  }
+}
+
+/* Small mobile portrait (max width 480px) */
+@media screen and (max-width: 480px) and (orientation: portrait) {
+  .app-header {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  
+  .app-title {
+    font-size: 1.1rem;
+  }
+  
+  .app-subtitle {
+    display: none;
+  }
+  
+  .header-controls {
+    gap: 8px;
+  }
+  
+  .btn {
+    padding: 5px 10px;
+    font-size: .7rem;
+  }
+  
+  .score-value {
+    font-size: .8rem;
+    min-width: 6ch;
+  }
+  
+  .hint-text {
+    display: none;
+  }
+  
+  .app-main {
+    padding: 4px 6px 16px;
+    padding-top: 8px;
+  }
+  
+  .game-grid {
+    width: 99vw;
+    gap: 1px;
+  }
+  
+  .cell {
+    border-radius: 2px;
+  }
+}
+
 /* ── Cells ───────────────────────────────────────────────── */
 .cell {
   border-radius: 4px;
   cursor: pointer;
   transition: transform var(--t-fast), box-shadow var(--t-fast), filter var(--t-fast);
   position: relative;
-  /* inner gloss */
   background-clip: padding-box;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
 }
 
 .cell.empty {
@@ -306,18 +429,31 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
 
 /* ── Animations ──────────────────────────────────────────── */
 @keyframes fall {
-  from { opacity: 0; transform: translateY(-20px) scale(.9); }
-  to   { opacity: 1; transform: translateY(0)     scale(1); }
+  0%   { opacity: 0; transform: translateY(-24px) scale(0.85); }
+  60%  { opacity: 1; transform: translateY(4px)   scale(1.05); }
+  80%  { transform: translateY(-2px) scale(0.98); }
+  100% { transform: translateY(0)    scale(1); }
+}
+
+@keyframes slide {
+  0%   { opacity: 0; transform: translateX(24px) scale(0.85); }
+  60%  { opacity: 1; transform: translateX(-4px) scale(1.05); }
+  80%  { transform: translateX(2px) scale(0.98); }
+  100% { transform: translateX(0)   scale(1); }
 }
 
 @keyframes pop {
-  0%   { transform: scale(1); }
-  50%  { transform: scale(1.18); }
-  100% { transform: scale(0);   opacity: 0; }
+  0%   { opacity: 1; transform: scale(1); }
+  40%  { transform: scale(1.2); }
+  100% { opacity: 0; transform: scale(0); }
 }
 
 .cell.fall {
-  animation: fall 180ms ease both;
+  animation: fall 220ms ease both;
+}
+
+.cell.slide {
+  animation: slide 220ms ease both;
 }
 
 .cell.popping {

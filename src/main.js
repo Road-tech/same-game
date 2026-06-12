@@ -15,6 +15,8 @@ import {
   match,
   isClear,
   CLEAR_BONUS,
+  applyGravity,
+  compressColumns,
 } from './same-game.js';
 import { t } from './i18n.js';
 
@@ -22,9 +24,9 @@ import { t } from './i18n.js';
 // Difficulty definitions
 // ---------------------------------------------------------------------------
 const DIFFICULTIES = {
-  easy:   { rows: 10, cols: 10, colors: 3, label: 'easy' },
-  medium: { rows: 12, cols: 15, colors: 4, label: 'medium' },
-  hard:   { rows: 15, cols: 20, colors: 5, label: 'hard' },
+  easy:   { rows: 11, cols: 9, colors: 3, label: 'easy' },
+  medium: { rows: 15, cols: 12, colors: 4, label: 'medium' },
+  hard:   { rows: 20, cols: 15, colors: 5, label: 'hard' },
 };
 
 // CSS class names for colors (styled in style.css)
@@ -34,7 +36,7 @@ const COLOR_CLASSES = ['c0', 'c1', 'c2', 'c3', 'c4'];
 // App state
 // ---------------------------------------------------------------------------
 let state        = null;
-let lang         = localStorage.getItem('sg-lang')  || 'en';
+let lang         = localStorage.getItem('sg-lang')  || 'zh';
 let theme        = localStorage.getItem('sg-theme') || 'light';
 let difficulty   = localStorage.getItem('sg-diff')  || 'easy';
 let highlighted  = null; // array of [row,col] currently highlighted, or null
@@ -263,14 +265,16 @@ function onCellTouch(e) {
 }
 
 function doPlay(r, c) {
-  // Find the matched group on the CURRENT board so we can animate removal
   const points = match(state.board, r, c);
   if (!points) return;
 
   isAnimating = true;
 
-  // Phase 1: pop-out animation on the matched cells (in place)
   const popDurationMs = 180;
+  const gravityDurationMs = 220;
+  const gravityToCompressDelayMs = 200;
+  const compressDurationMs = 220;
+
   grid.querySelectorAll('.cell').forEach(cell => {
     const cr = +cell.dataset.row;
     const cc = +cell.dataset.col;
@@ -280,30 +284,195 @@ function doPlay(r, c) {
     }
   });
 
-  // Phase 2: after pop completes, update state and in-place refresh.
-  // In-place update avoids the whole-grid flash caused by innerHTML=''.
   setTimeout(() => {
-    state = play(state, r, c);
+    const afterRemove = cloneBoard(state.board);
+    for (const [rr, rc] of points) {
+      afterRemove[rr][rc] = null;
+    }
+
+    const afterGravityBoard = applyGravity(afterRemove, state.rows, state.cols);
+    const afterCompressBoard = compressColumns(afterGravityBoard, state.rows, state.cols);
+
+    const tempState = { ...state, board: afterGravityBoard };
     highlighted = null;
     touchHighlightedCell = null;
     previewEl.textContent = '';
 
-    updateScoreDisplay();
-    const changedCells = updateGridInPlace();
-    animateFallCells(changedCells);
+    updateGridForGravity(afterRemove, afterGravityBoard);
 
-    isAnimating = false;
+    setTimeout(() => {
+      state = { ...state, board: afterCompressBoard };
+      const gained = getScoreFromPoints(points);
+      const cleared = isClear(afterCompressBoard);
+      const bonus = cleared ? CLEAR_BONUS : 0;
+      state.score = state.score + gained + bonus;
+      state.hasNext = cleared ? false : getHasNext(afterCompressBoard);
+      state.cleared = cleared;
+      state.history = [...state.history, {
+        board: state.board,
+        score: state.score - gained - bonus,
+        hasNext: state.hasNext,
+        cleared: state.cleared,
+      }];
 
-    if (state.cleared) {
-      saveBest(state.score);
-      showOverlay(true);
-      return;
-    }
-    if (!state.hasNext) {
-      saveBest(state.score);
-      showOverlay(false);
-    }
+      updateScoreDisplay();
+      const changedCells = updateGridForCompress(afterGravityBoard, afterCompressBoard);
+
+      setTimeout(() => {
+        isAnimating = false;
+
+        if (state.cleared) {
+          saveBest(state.score);
+          showOverlay(true);
+          return;
+        }
+        if (!state.hasNext) {
+          saveBest(state.score);
+          showOverlay(false);
+        }
+      }, compressDurationMs);
+
+    }, gravityDurationMs + gravityToCompressDelayMs);
+
   }, popDurationMs);
+}
+
+function cloneBoard(board) {
+  return board.map(row => row.slice());
+}
+
+function getScoreFromPoints(points) {
+  return (points.length - 2) ** 2;
+}
+
+function getHasNext(board) {
+  const rows = board.length;
+  const cols = board[0].length;
+  const DIRS = [[-1, 0], [0, 1], [1, 0], [0, -1]];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const v = board[r][c];
+      if (v === null) continue;
+      for (const [dr, dc] of DIRS) {
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr < 0 || nc < 0 || nr >= rows || nc >= cols) continue;
+        if (board[nr][nc] === v) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function updateGridForGravity(before, after) {
+  const cells = grid.children;
+  
+  requestAnimationFrame(() => {
+    for (let r = 0; r < state.rows; r++) {
+      for (let c = 0; c < state.cols; c++) {
+        const cell = cells[r * state.cols + c];
+        if (!cell) continue;
+        const oldVal = before[r][c];
+        const newVal = after[r][c];
+
+        if (newVal === null) {
+          cell.classList.remove('c0', 'c1', 'c2', 'c3', 'c4', 'highlight', 'popping', 'fall', 'slide');
+          cell.classList.add('empty');
+          cell.style.opacity = '';
+          cell.style.transform = '';
+          cell.style.transition = '';
+        } else {
+          const oldColorClass = [...cell.classList].find(x => /^c\d$/.test(x));
+          const needsColorUpdate = !oldColorClass || oldColorClass !== `c${newVal}`;
+          const needsAnimation = oldVal === null && newVal !== null;
+          
+          cell.classList.remove('empty', 'highlight', 'popping', 'slide');
+          
+          if (needsColorUpdate) {
+            cell.classList.remove('c0', 'c1', 'c2', 'c3', 'c4');
+            cell.classList.add(`c${newVal}`);
+          }
+          
+          if (needsAnimation) {
+            cell.style.opacity = '0';
+            cell.style.transform = 'translateY(-24px) scale(0.85)';
+            
+            requestAnimationFrame(() => {
+              cell.style.transition = 'opacity 220ms ease, transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1)';
+              cell.style.opacity = '1';
+              cell.style.transform = 'translateY(0) scale(1)';
+              
+              setTimeout(() => {
+                cell.style.transition = '';
+              }, 220);
+            });
+          } else {
+            cell.style.opacity = '';
+            cell.style.transform = '';
+            cell.style.transition = '';
+          }
+        }
+      }
+    }
+  });
+}
+
+function updateGridForCompress(before, after) {
+  const cells = grid.children;
+  const changed = [];
+  
+  requestAnimationFrame(() => {
+    for (let r = 0; r < state.rows; r++) {
+      for (let c = 0; c < state.cols; c++) {
+        const cell = cells[r * state.cols + c];
+        if (!cell) continue;
+        const oldVal = before[r][c];
+        const newVal = after[r][c];
+
+        if (newVal === null) {
+          cell.classList.remove('c0', 'c1', 'c2', 'c3', 'c4', 'highlight', 'popping', 'fall', 'slide');
+          cell.classList.add('empty');
+          cell.style.opacity = '';
+          cell.style.transform = '';
+          cell.style.transition = '';
+        } else {
+          const oldColorClass = [...cell.classList].find(x => /^c\d$/.test(x));
+          const needsColorUpdate = !oldColorClass || oldColorClass !== `c${newVal}`;
+          const needsAnimation = oldVal === null && newVal !== null;
+          
+          cell.classList.remove('empty', 'highlight', 'popping', 'fall');
+          
+          if (needsColorUpdate) {
+            cell.classList.remove('c0', 'c1', 'c2', 'c3', 'c4');
+            cell.classList.add(`c${newVal}`);
+          }
+          
+          if (needsAnimation) {
+            cell.style.opacity = '0';
+            cell.style.transform = 'translateX(24px) scale(0.85)';
+            
+            requestAnimationFrame(() => {
+              cell.style.transition = 'opacity 220ms ease, transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1)';
+              cell.style.opacity = '1';
+              cell.style.transform = 'translateX(0) scale(1)';
+              
+              setTimeout(() => {
+                cell.style.transition = '';
+              }, 220);
+            });
+            
+            changed.push(cell);
+          } else {
+            cell.style.opacity = '';
+            cell.style.transform = '';
+            cell.style.transition = '';
+          }
+        }
+      }
+    }
+  });
+  
+  return changed;
 }
 
 // ---------------------------------------------------------------------------
@@ -365,10 +534,16 @@ function onThemeToggle() {
 }
 
 function onLangToggle() {
-  lang = lang === 'ja' ? 'en' : 'ja';
+  lang = lang === 'zh' ? 'en' : lang === 'en' ? 'ja' : 'zh';
   localStorage.setItem('sg-lang', lang);
   applyTranslations();
-  applyTheme(); // refresh theme button label
+  applyTheme();
+  updateLangButton();
+}
+
+function updateLangButton() {
+  const btn = document.getElementById('lang-toggle');
+  btn.textContent = lang === 'zh' ? 'EN' : lang === 'en' ? 'JA' : '中文';
 }
 
 // ---------------------------------------------------------------------------
@@ -417,5 +592,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   applyTheme();
   applyTranslations();
+  updateLangButton();
   startGame();
 });
