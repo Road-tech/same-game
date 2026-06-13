@@ -59,6 +59,7 @@ export function match(board, row, col) {
   if (target === null || target === undefined) return null;
 
   const points = [[row, col]];
+  const visited = new Set([`${row},${col}`]);
 
   function flood(r, c) {
     for (const [dr, dc] of DIRS) {
@@ -66,7 +67,9 @@ export function match(board, row, col) {
       const nc = c + dc;
       if (nr < 0 || nc < 0 || nr >= rows || nc >= cols) continue;
       if (board[nr][nc] !== target) continue;
-      if (points.some(([pr, pc]) => pr === nr && pc === nc)) continue;
+      const key = `${nr},${nc}`;
+      if (visited.has(key)) continue;
+      visited.add(key);
       points.push([nr, nc]);
       flood(nr, nc);
     }

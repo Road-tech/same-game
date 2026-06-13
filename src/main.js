@@ -43,10 +43,72 @@ let highlighted  = null; // array of [row,col] currently highlighted, or null
 let isAnimating  = false; // true while a removal animation is playing
 
 // ---------------------------------------------------------------------------
+// Audio context for sound effects
+// ---------------------------------------------------------------------------
+let audioContext = null;
+let soundEnabled = true;
+
+function initAudio() {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function playPopSound(count) {
+  if (!soundEnabled || !audioContext) return;
+  
+  const ctx = audioContext;
+  const notes = [523.25, 659.25, 783.99, 1046.50];
+  
+  notes.forEach((freq, i) => {
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.04);
+    
+    const startTime = ctx.currentTime + i * 0.04;
+    const duration = 0.08;
+    
+    gainNode.gain.setValueAtTime(0, startTime);
+    gainNode.gain.linearRampToValueAtTime(0.25, startTime + 0.01);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+    
+    oscillator.start(startTime);
+    oscillator.stop(startTime + duration);
+  });
+}
+
+function playDropSound() {
+  if (!soundEnabled || !audioContext) return;
+  
+  const ctx = audioContext;
+  const oscillator = ctx.createOscillator();
+  const gainNode = ctx.createGain();
+  
+  oscillator.connect(gainNode);
+  gainNode.connect(ctx.destination);
+  
+  oscillator.type = 'triangle';
+  oscillator.frequency.setValueAtTime(150, ctx.currentTime);
+  oscillator.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.2);
+  
+  gainNode.gain.setValueAtTime(0.15, ctx.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+  
+  oscillator.start(ctx.currentTime);
+  oscillator.stop(ctx.currentTime + 0.2);
+}
+
+// ---------------------------------------------------------------------------
 // DOM references (set after DOMContentLoaded)
 // ---------------------------------------------------------------------------
 let grid, scoreEl, bestEl, undoBtn, newBtn, overlay, overlayTitle,
-    overlayMsg, overlayScore, overlayPlayBtn, previewEl, hintEl;
+    overlayMsg, overlayScore, overlayPlayBtn, previewEl, hintEl, soundToggle,
+    themeToggle, langToggle, difficultyBtn;
 
 // ---------------------------------------------------------------------------
 // Best score helpers
@@ -70,10 +132,6 @@ function applyTranslations() {
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     el.placeholder = _(el.dataset.i18nPlaceholder);
   });
-  // Update difficulty selector options
-  document.querySelectorAll('#difficulty-select option').forEach(opt => {
-    opt.textContent = _(opt.value);
-  });
   hintEl.textContent = _('hint');
 }
 
@@ -89,8 +147,17 @@ function applyTheme() {
 // ---------------------------------------------------------------------------
 // New game
 // ---------------------------------------------------------------------------
-function startGame() {
+function getOrientedDef() {
   const def = DIFFICULTIES[difficulty];
+  const isLandscape = window.innerWidth > window.innerHeight;
+  if (isLandscape) {
+    return { ...def, rows: def.cols, cols: def.rows };
+  }
+  return def;
+}
+
+function startGame() {
+  const def = getOrientedDef();
   state = createGame(def.rows, def.cols, def.colors);
   highlighted = null;
   updateScoreDisplay();
@@ -116,9 +183,8 @@ function updateScoreDisplay() {
  */
 function renderGrid() {
   grid.innerHTML = '';
-  const def = DIFFICULTIES[difficulty];
-  grid.style.setProperty('--cols', def.cols);
-  grid.style.setProperty('--rows', def.rows);
+  grid.style.setProperty('--cols', state.cols);
+  grid.style.setProperty('--rows', state.rows);
 
   for (let r = 0; r < state.rows; r++) {
     for (let c = 0; c < state.cols; c++) {
@@ -134,10 +200,11 @@ function renderGrid() {
         cell.classList.add('empty');
       }
 
-      cell.addEventListener('click',    onCellClick);
+      cell.addEventListener('mousedown', onCellMouseDown);
       cell.addEventListener('mouseenter', onCellHover);
       cell.addEventListener('mouseleave', onCellLeave);
-      cell.addEventListener('touchstart', onCellTouch, { passive: true });
+      cell.addEventListener('touchstart', onCellTouchStart, { passive: false });
+      cell.addEventListener('touchend', onCellTouchEnd, { passive: false });
 
       grid.appendChild(cell);
     }
@@ -189,21 +256,25 @@ function updateGridInPlace() {
 function clearHighlight() {
   highlighted = null;
   previewEl.textContent = '';
-  grid.querySelectorAll('.cell.highlight').forEach(el => el.classList.remove('highlight'));
+  const highlightedCells = grid.querySelectorAll('.cell.highlight');
+  for (let i = 0; i < highlightedCells.length; i++) {
+    highlightedCells[i].classList.remove('highlight');
+  }
 }
 
 function applyHighlight(points) {
   highlighted = points;
-  grid.querySelectorAll('.cell').forEach(cell => {
-    const r = +cell.dataset.row;
-    const c = +cell.dataset.col;
-    const inGroup = points.some(([hr, hc]) => hr === r && hc === c);
-    if (inGroup) {
+  const pointSet = new Set(points.map(([r, c]) => `${r},${c}`));
+  const cells = grid.children;
+  for (let i = 0; i < cells.length; i++) {
+    const cell = cells[i];
+    const key = `${cell.dataset.row},${cell.dataset.col}`;
+    if (pointSet.has(key)) {
       cell.classList.add('highlight');
     } else {
       cell.classList.remove('highlight');
     }
-  });
+  }
   const score = (points.length - 2) ** 2;
   previewEl.textContent = `${_('previewScore')}: +${score}`;
 }
@@ -211,62 +282,91 @@ function applyHighlight(points) {
 // ---------------------------------------------------------------------------
 // Event handlers
 // ---------------------------------------------------------------------------
+let hoverRaf = null;
+let hoverTarget = null;
+
 function onCellHover(e) {
   if (isAnimating) return;
   if (state.cleared || !state.hasNext) return;
-  const r = +e.currentTarget.dataset.row;
-  const c = +e.currentTarget.dataset.col;
-  if (state.board[r]?.[c] === null || state.board[r]?.[c] === undefined) {
-    clearHighlight();
-    return;
-  }
-  const points = match(state.board, r, c);
-  if (points && points.length >= 2) {
-    applyHighlight(points);
-  } else {
-    clearHighlight();
-  }
+
+  hoverTarget = e.currentTarget;
+  if (hoverRaf) return;
+
+  hoverRaf = requestAnimationFrame(() => {
+    hoverRaf = null;
+    if (!hoverTarget) return;
+
+    const r = +hoverTarget.dataset.row;
+    const c = +hoverTarget.dataset.col;
+    if (state.board[r]?.[c] === null || state.board[r]?.[c] === undefined) {
+      clearHighlight();
+      return;
+    }
+    const points = match(state.board, r, c);
+    if (points && points.length >= 2) {
+      applyHighlight(points);
+    } else {
+      clearHighlight();
+    }
+  });
 }
 
 function onCellLeave() {
   if (isAnimating) return;
+  hoverTarget = null;
+  if (hoverRaf) {
+    cancelAnimationFrame(hoverRaf);
+    hoverRaf = null;
+  }
   clearHighlight();
 }
 
-function onCellClick(e) {
-  if (isAnimating) return;
-  if (state.cleared || !state.hasNext) return;
+function onCellMouseDown(e) {
+  if (isAnimating) { console.log('mousedown blocked: isAnimating'); return; }
+  if (state.cleared || !state.hasNext) { console.log('mousedown blocked: game ended'); return; }
   const r = +e.currentTarget.dataset.row;
   const c = +e.currentTarget.dataset.col;
+  console.log('mousedown', r, c);
   doPlay(r, c);
 }
 
-let touchHighlightedCell = null;
 let isTouchEnabled = true;
+let touchHandled = false;
 
-function onCellTouch(e) {
-  if (!isTouchEnabled) return;
-  if (isAnimating) return;
-  if (state.cleared || !state.hasNext) return;
-  
+function clearSelection(e) {
+  try {
+    const sel = window.getSelection();
+    if (sel) {
+      sel.removeAllRanges();
+    }
+    if (document.selection) {
+      document.selection.empty();
+    }
+  } catch (err) {
+    // Silently ignore
+  }
+}
+
+function onCellTouchStart(e) {
+  e.preventDefault();
+  clearSelection();
+
+  if (!isTouchEnabled) { console.log('touchstart blocked: isTouchEnabled=false'); return; }
+  if (isAnimating) { console.log('touchstart blocked: isAnimating'); return; }
+  if (state.cleared || !state.hasNext) { console.log('touchstart blocked: game ended'); return; }
+
   const r = +e.currentTarget.dataset.row;
   const c = +e.currentTarget.dataset.col;
+  console.log('touchstart', r, c);
 
-  if (touchHighlightedCell &&
-      touchHighlightedCell[0] === r && touchHighlightedCell[1] === c) {
-    doPlay(r, c);
-    touchHighlightedCell = null;
-    return;
-  }
+  touchHandled = true;
+  setTimeout(() => { touchHandled = false; }, 50);
 
-  const points = match(state.board, r, c);
-  if (points && points.length >= 2) {
-    applyHighlight(points);
-    touchHighlightedCell = [r, c];
-  } else {
-    clearHighlight();
-    touchHighlightedCell = null;
-  }
+  doPlay(r, c);
+}
+
+function onCellTouchEnd(e) {
+  e.preventDefault();
 }
 
 function doPlay(r, c) {
@@ -280,6 +380,9 @@ function doPlay(r, c) {
   const gravityDurationMs = 250;
   const gravityToCompressDelayMs = 150;
   const compressDurationMs = 300;
+
+  initAudio();
+  playPopSound(points.length);
 
   grid.querySelectorAll('.cell').forEach(cell => {
     const cr = +cell.dataset.row;
@@ -301,25 +404,28 @@ function doPlay(r, c) {
 
     const tempState = { ...state, board: afterGravityBoard };
     highlighted = null;
-    touchHighlightedCell = null;
     previewEl.textContent = '';
 
     updateGridForGravity(afterRemove, afterGravityBoard);
+    playDropSound();
 
     setTimeout(() => {
-      state = { ...state, board: afterCompressBoard };
       const gained = getScoreFromPoints(points);
       const cleared = isClear(afterCompressBoard);
       const bonus = cleared ? CLEAR_BONUS : 0;
-      state.score = state.score + gained + bonus;
-      state.hasNext = cleared ? false : getHasNext(afterCompressBoard);
-      state.cleared = cleared;
+
+      // Save current state BEFORE modifying
       state.history = [...state.history, {
-        board: state.board,
-        score: state.score - gained - bonus,
+        board: cloneBoard(state.board),
+        score: state.score,
         hasNext: state.hasNext,
         cleared: state.cleared,
       }];
+
+      state = { ...state, board: afterCompressBoard };
+      state.score = state.score + gained + bonus;
+      state.hasNext = cleared ? false : getHasNext(afterCompressBoard);
+      state.cleared = cleared;
 
       updateScoreDisplay();
       const changedCells = updateGridForCompress(afterGravityBoard, afterCompressBoard);
@@ -540,10 +646,10 @@ function hideOverlay() {
 // Controls
 // ---------------------------------------------------------------------------
 function onUndoClick() {
+  if (isAnimating) return;
   if (!state || state.history.length === 0) return;
   state = undo(state);
   highlighted = null;
-  touchHighlightedCell = null;
   previewEl.textContent = '';
   updateScoreDisplay();
   renderGrid();
@@ -553,16 +659,46 @@ function onNewGame() {
   startGame();
 }
 
-function onDifficultyChange(e) {
-  difficulty = e.target.value;
+function onDifficultyToggle() {
+  const order = ['easy', 'medium', 'hard'];
+  const idx = order.indexOf(difficulty);
+  difficulty = order[(idx + 1) % order.length];
   localStorage.setItem('sg-diff', difficulty);
+  updateDifficultyButton();
   startGame();
+}
+
+function updateDifficultyButton() {
+  if (difficultyBtn) {
+    difficultyBtn.textContent = _(difficulty);
+    difficultyBtn.dataset.i18n = difficulty;
+  }
 }
 
 function onThemeToggle() {
   theme = theme === 'dark' ? 'light' : 'dark';
   localStorage.setItem('sg-theme', theme);
   applyTheme();
+  updateThemeButton();
+}
+
+function updateThemeButton() {
+  const icon = themeToggle.querySelector('i');
+  if (icon) {
+    icon.className = theme === 'dark' ? 'fa-solid fa-moon' : 'fa-solid fa-sun';
+  }
+}
+
+function onSoundToggle() {
+  soundEnabled = !soundEnabled;
+  updateSoundButton();
+}
+
+function updateSoundButton() {
+  const icon = soundToggle.querySelector('i');
+  if (icon) {
+    icon.className = soundEnabled ? 'fa-solid fa-bell' : 'fa-solid fa-bell-slash';
+  }
 }
 
 function onLangToggle() {
@@ -575,7 +711,15 @@ function onLangToggle() {
 
 function updateLangButton() {
   const btn = document.getElementById('lang-toggle');
-  btn.textContent = lang === 'zh' ? 'EN' : lang === 'en' ? 'JA' : '中文';
+  if (!btn) return;
+  const icon = btn.querySelector('i');
+  const text = btn.querySelector('span');
+  if (text) {
+    text.textContent = lang === 'zh' ? 'EN' : lang === 'en' ? 'JA' : '中';
+  }
+  if (!icon) {
+    btn.textContent = lang === 'zh' ? 'EN' : lang === 'en' ? 'JA' : '中';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -596,34 +740,59 @@ function onKeyDown(e) {
 // Boot
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
-  grid          = document.getElementById('game-grid');
-  scoreEl       = document.getElementById('score-value');
-  bestEl        = document.getElementById('best-value');
-  undoBtn       = document.getElementById('undo-btn');
-  newBtn        = document.getElementById('new-btn');
-  overlay       = document.getElementById('overlay');
-  overlayTitle  = document.getElementById('overlay-title');
-  overlayMsg    = document.getElementById('overlay-msg');
-  overlayScore  = document.getElementById('overlay-score');
-  overlayPlayBtn= document.getElementById('overlay-play-btn');
-  previewEl     = document.getElementById('preview');
-  hintEl        = document.getElementById('hint');
+  try {
+    grid          = document.getElementById('game-grid');
+    scoreEl       = document.getElementById('score-value');
+    bestEl        = document.getElementById('best-value');
+    undoBtn       = document.getElementById('undo-btn');
+    newBtn        = document.getElementById('new-btn');
+    overlay       = document.getElementById('overlay');
+    overlayTitle  = document.getElementById('overlay-title');
+    overlayMsg    = document.getElementById('overlay-msg');
+    overlayScore  = document.getElementById('overlay-score');
+    overlayPlayBtn= document.getElementById('overlay-play-btn');
+    previewEl     = document.getElementById('preview');
+    hintEl        = document.getElementById('hint');
+    soundToggle   = document.getElementById('sound-toggle');
+    themeToggle   = document.getElementById('theme-toggle');
+    langToggle    = document.getElementById('lang-toggle');
+    difficultyBtn = document.getElementById('difficulty-btn');
 
-  // Wire controls
-  undoBtn.addEventListener('click', onUndoClick);
-  newBtn.addEventListener('click',  onNewGame);
-  overlayPlayBtn.addEventListener('click', () => startGame());
-  document.getElementById('difficulty-select').addEventListener('change', onDifficultyChange);
-  document.getElementById('theme-toggle').addEventListener('click', onThemeToggle);
-  document.getElementById('lang-toggle').addEventListener('click',  onLangToggle);
+    // Wire controls
+    undoBtn.addEventListener('click', onUndoClick);
+    newBtn.addEventListener('click',  onNewGame);
+    overlayPlayBtn.addEventListener('click', () => startGame());
+    difficultyBtn.addEventListener('click', onDifficultyToggle);
+    themeToggle.addEventListener('click', onThemeToggle);
+    soundToggle.addEventListener('click', onSoundToggle);
+    langToggle.addEventListener('click',  onLangToggle);
 
-  // Set initial difficulty select value
-  document.getElementById('difficulty-select').value = difficulty;
+    // Set initial difficulty button text
+    updateDifficultyButton();
 
-  document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onKeyDown);
 
-  applyTheme();
-  applyTranslations();
-  updateLangButton();
-  startGame();
+    // Prevent text selection on touch devices - only for game grid area
+    const gameGrid = document.getElementById('game-grid');
+    if (gameGrid) {
+      gameGrid.addEventListener('pointerdown', clearSelection, { passive: true });
+      gameGrid.addEventListener('pointermove', clearSelection, { passive: true });
+      gameGrid.addEventListener('selectstart', (e) => e.preventDefault());
+    }
+    // Global select start prevention
+    document.addEventListener('selectstart', (e) => {
+      if (e.target.closest('input, textarea, select')) return;
+      e.preventDefault();
+    });
+
+    applyTheme();
+    applyTranslations();
+    updateLangButton();
+    updateThemeButton();
+    updateSoundButton();
+    startGame();
+  } catch (err) {
+    console.error('Initialization error:', err);
+    alert('Error initializing game: ' + err.message);
+  }
 });

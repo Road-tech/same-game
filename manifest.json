@@ -1,0 +1,26 @@
+{
+  "name": "Same Game",
+  "short_name": "SameGame",
+  "description": "Classic Same Game puzzle. Clear groups of adjacent same-color blocks for exponential score.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#f4f6f8",
+  "orientation": "any",
+  "scope": "/",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='24' fill='%234a90d9'/%3E%3Crect x='36' y='36' width='44' height='44' rx='8' fill='%23ffffff'/%3E%3Crect x='106' y='36' width='44' height='44' rx='8' fill='%23ffffff'/%3E%3Crect x='36' y='106' width='44' height='44' rx='8' fill='%23ffffff'/%3E%3Crect x='106' y='106' width='44' height='44' rx='8' fill='%23ffffff'/%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='64' fill='%234a90d9'/%3E%3Crect x='96' y='96' width='120' height='120' rx='16' fill='%23ffffff'/%3E%3Crect x='296' y='96' width='120' height='120' rx='16' fill='%23ffffff'/%3E%3Crect x='96' y='296' width='120' height='120' rx='16' fill='%23ffffff'/%3E%3Crect x='296' y='296' width='120' height='120' rx='16' fill='%23ffffff'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

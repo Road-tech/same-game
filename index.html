@@ -8,49 +8,62 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>Same Game</title>
   <meta name="description" content="Classic Same Game puzzle. Clear groups of adjacent same-color blocks for exponential score. 3 difficulties, undo." />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='24' fill='%234a90d9'/%3E%3Crect x='36' y='36' width='44' height='44' rx='8' fill='%23ffffff'/%3E%3Crect x='106' y='36' width='44' height='44' rx='8' fill='%23ffffff'/%3E%3Crect x='36' y='106' width='44' height='44' rx='8' fill='%23ffffff'/%3E%3Crect x='106' y='106' width='44' height='44' rx='8' fill='%23ffffff'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <!-- ── Header ─────────────────────────────────────────────── -->
   <header class="app-header">
-    <div class="header-left">
-      <h1 class="app-title" data-i18n="title">Same Game</h1>
-      <p class="app-subtitle" data-i18n="subtitle">Click groups of same-color blocks to score</p>
+    <!-- Row 1: Info (Title + Difficulty + Scores) -->
+    <div class="header-row header-row-info">
+      <div class="header-left">
+        <h1 class="app-title" data-i18n="title">Same Game</h1>
+        <p class="app-subtitle" data-i18n="subtitle">Click groups of same-color blocks to score</p>
+      </div>
+
+      <div class="header-info-right">
+        <!-- Scores -->
+        <div class="score-group">
+          <div class="score-block">
+            <span class="score-label" data-i18n="score">Score</span>
+            <span class="score-value" id="score-value">0</span>
+          </div>
+          <div class="score-block">
+            <span class="score-label" data-i18n="best">Best</span>
+            <span class="score-value" id="best-value">0</span>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="header-controls">
-      <!-- Difficulty -->
-      <div class="control-group">
-        <label class="control-label" for="difficulty-select" data-i18n="difficulty">Difficulty</label>
-        <select id="difficulty-select" class="control-select">
-          <option value="easy">Easy</option>
-          <option value="medium">Medium</option>
-          <option value="hard">Hard</option>
-        </select>
-      </div>
+    <!-- Row 2: Actions (Difficulty + Game + Meta) -->
+    <div class="header-row header-row-actions">
+      <!-- Difficulty toggle button -->
+      <button id="difficulty-btn" class="btn btn-diff" data-i18n="easy">Easy</button>
 
-      <!-- Scores -->
-      <div class="score-group">
-        <div class="score-block">
-          <span class="score-label" data-i18n="score">Score</span>
-          <span class="score-value" id="score-value">0</span>
-        </div>
-        <div class="score-block">
-          <span class="score-label" data-i18n="best">Best</span>
-          <span class="score-value" id="best-value">0</span>
-        </div>
-      </div>
-
-      <!-- Action buttons -->
+      <!-- Game action buttons -->
       <div class="btn-group">
-        <button id="undo-btn" class="btn btn-secondary" data-i18n="undo">Undo</button>
-        <button id="new-btn"  class="btn btn-primary"   data-i18n="newGame">New Game</button>
+        <button id="undo-btn" class="btn btn-secondary" data-i18n="undo">
+          <i class="fa-solid fa-undo"></i> <span data-i18n="undo">Undo</span>
+        </button>
+        <button id="new-btn" class="btn btn-primary" data-i18n="newGame">
+          <i class="fa-solid fa-rotate-right"></i> <span data-i18n="newGame">New Game</span>
+        </button>
       </div>
 
-      <!-- Meta buttons -->
+      <!-- Meta buttons (icon only) -->
       <div class="meta-group">
-        <button id="theme-toggle" class="btn btn-icon">Dark</button>
-        <button id="lang-toggle"  class="btn btn-icon">JA</button>
+        <button id="theme-toggle" class="btn btn-secondary btn-icon" title="Toggle theme">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+        <button id="sound-toggle" class="btn btn-secondary btn-icon" title="Toggle sound">
+          <i class="fa-solid fa-bell"></i>
+        </button>
+        <button id="lang-toggle" class="btn btn-secondary btn-icon" title="Toggle language">
+          <i class="fa-solid fa-language"></i>
+        </button>
       </div>
     </div>
   </header>
@@ -77,6 +90,13 @@
     </div>
   </div>
 
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {
+        // Silent fail
+      });
+    }
+  </script>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

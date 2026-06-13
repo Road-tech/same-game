@@ -81,6 +81,19 @@ MIT © 2026 [SEN LLC (SEN 合同会社)](https://sen.ltd)
 <!-- sen-publish:links -->
 ## Changelog
 
+### v1.3.0 (2026-06-13)
+- ✅ Reordered gravity and column compression - gravity now applies before column compression
+- ✅ Auto-orientation support - rows and columns swap based on device orientation
+- ✅ Added sound effects - click sounds on block removal
+- ✅ Desktop hover preview - mouse hover highlights removable groups
+- ✅ Fixed Safari selection issue - touch no longer triggers text/element selection
+- ✅ Fixed undo functionality - correctly reverts board state and score
+- ✅ Optimized click response - replaced click with mousedown/touchstart to eliminate delay
+- ✅ Added PWA support - works offline, add to home screen
+- ✅ Difficulty selection changed to button toggle - Easy/Medium/Hard with one click
+- ✅ Fixed page scroll lock - optimized mobile experience
+- ✅ Mobile portrait layout redesign - two-row header, adaptive buttons
+
 ### v1.2.0 (2026-06-12)
 - ✅ Added Chinese language support (中文)
 - ✅ Mobile portrait optimization - grid fills screen width
